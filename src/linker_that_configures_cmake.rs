@@ -1,11 +1,13 @@
 use clap;
 use std::error;
 use std::process::exit;
-
+use toml::Value;
 use clap::{App, Arg};
 use ex::fs;
 use std::fmt::Write;
 use std::path::Path;
+use std::fs::File;
+use std::io::Read;
 
 pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
     let matches = App::new("esp-idf-n-hal build support - Linker")
@@ -117,7 +119,25 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
             }
         }
 
-        writeln!(cmakelists, "file(GLOB_RECURSE RUST_SRCS \"../src/*.rs\")")?;
+        let mut input = String::new();
+        File::open("Cargo.toml")
+            .and_then(|mut f| f.read_to_string(&mut input))
+            .unwrap();
+
+        let value = input.parse::<Value>().unwrap();
+
+        // Add any local dependencies to the CMakeFiles so it can know better when to build.
+        write!(cmakelists, "file(GLOB_RECURSE RUST_SRCS\n    \"../src/*.rs\"")?;
+        for x in value["dependencies"].as_table().unwrap() {
+            if x.1.is_table() {
+                let t = x.1.as_table().unwrap();
+                if let Some(v) = t.get("path") {
+                    write!(cmakelists, "\n    \"../{}/src/*.rs\"",v.as_str().unwrap())?;
+                }
+            }
+        }
+        writeln!(cmakelists, ")")?;
+
         writeln!(cmakelists, "set(LIBS_FROM_RUST \n{})", libs_list_str)?;
         writeln!(cmakelists)?;
         let libs_list = "${LIBS_FROM_RUST}";

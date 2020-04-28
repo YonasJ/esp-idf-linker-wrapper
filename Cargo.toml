@@ -10,5 +10,6 @@ edition = "2018"
 clap = "^2"
 ex = "^0"
 bindgen = "^0"
-simple_logger = "^1"
 regex = "1"
+toml = "0.5.6"
+esp-idf-n-hal-build-support = { path="../esp-idf-n-hal-build-support"}
