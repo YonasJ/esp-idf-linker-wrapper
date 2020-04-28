@@ -8,6 +8,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::fs::File;
 use std::io::Read;
+use std::collections::HashMap;
 
 pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
     let matches = App::new("esp-idf-n-hal build support - Linker")
@@ -90,20 +91,34 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
         let mut libs_list_str = String::new();
         let libs_for_idf_path = "target/for_idf";
         fs::create_dir_all(libs_for_idf_path)?;
+        let mut name_counter = HashMap::<String,u32>::new();
 
         for x in matches.values_of("libs").unwrap() {
             let lib_is_included_by_isp_idf_so_should_be_skipped =
                 x.contains("libcompiler_builtins");
             let xp = Path::new(x);
-            let lib_name = xp.file_name().unwrap().to_str().unwrap();
+            let lib_name = xp.file_stem().unwrap().to_str().unwrap();
             // let lib_base_name =lib_name;
-            let lib_base_name =regex::Regex::new("-[^.]+").unwrap().replace_all(lib_name, "_LAST_BUILD_");
+            let lib_base_name = format!("{}", regex::Regex::new("-.*").unwrap().replace_all(lib_name, ""));
+
+            let name_count = match name_counter.get(&lib_base_name) {
+                Some(&number) => {
+                    name_counter.remove(&lib_base_name);
+                    name_counter.insert(lib_base_name.clone(), number+1);
+                    format!("-{}", (number+1))
+                },
+                _ => {
+                    name_counter.insert(lib_base_name.clone(), 0);
+                    String::new()
+                },
+            };
 
             let new_lib_name = format!(
-                "{}/{}",
+                "{}/{}{}.{}",
                 libs_for_idf_path,
-                lib_base_name
-            );
+                lib_base_name,
+                name_count,
+                xp.extension().unwrap().to_str().unwrap());
 
             if !lib_is_included_by_isp_idf_so_should_be_skipped {
                 fs::copy(x, &new_lib_name)?;
