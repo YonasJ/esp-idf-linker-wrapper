@@ -1,5 +1,5 @@
 use clap;
-use std::error;
+use std::{error, env};
 use std::process::exit;
 use toml::Value;
 use clap::{App, Arg};
@@ -11,6 +11,11 @@ use std::io::Read;
 use std::collections::HashMap;
 
 pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
+    if env::var("CARGO_MANIFEST_DIR").is_err() {
+        env::set_var("CARGO_MANIFEST_DIR", env::current_dir().unwrap().to_str().unwrap());
+    }
+    let base_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+
     let matches = App::new("esp-idf-n-hal build support - Linker")
         .version("0.1.0")
         .author("Yonas Jongkind <yonas.jongkind@gmail.com>")
@@ -61,12 +66,14 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
     // }
     println!("BEGIN linker_main: {:?}", std::env::current_exe().unwrap());
 
-    let main_path = Path::new("main");
+    let main_dir = format!("{}/main", base_dir);
+    let main_path = Path::new(main_dir.as_str());
     if !main_path.exists() {
         fs::create_dir_all(main_path)?;
     }
 
-    let cmakelists_in_path = Path::new("main/CMakeLists.txt.in");
+    let cmakelists_in = format!("{}/main/CMakeLists.txt.in", base_dir);
+    let cmakelists_in_path = Path::new(cmakelists_in.as_str());
     if !cmakelists_in_path.exists() {
         println!("Generating: {}", cmakelists_in_path.to_str().unwrap());
         fs::write(
@@ -82,15 +89,16 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
     }
 
     //    let CMakeFiles = "idf_component_register(SRCS "esp_app_main.c" INCLUDE_DIRS "")";
-    let cmakelists_path = Path::new("main/CMakeLists.txt");
+    let cmakelists_str = format!("{}/main/CMakeLists.txt", base_dir);
+    let cmakelists_path = Path::new(cmakelists_str.as_str());
 
     let mut cmakelists = String::new();
     write!(cmakelists, "{}", fs::read_to_string(cmakelists_in_path)?)?;
 
     if matches.is_present("libs") {
         let mut libs_list_str = String::new();
-        let libs_for_idf_path = "target/for_idf";
-        fs::create_dir_all(libs_for_idf_path)?;
+        const LIBS_FOR_IDF_PATH:&str = "target/for_idf";
+        fs::create_dir_all(LIBS_FOR_IDF_PATH)?;
         let mut name_counter = HashMap::<String,u32>::new();
 
         for x in matches.values_of("libs").unwrap() {
@@ -115,7 +123,7 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
 
             let new_lib_name = format!(
                 "{}/{}{}.{}",
-                libs_for_idf_path,
+                LIBS_FOR_IDF_PATH,
                 lib_base_name,
                 name_count,
                 xp.extension().unwrap().to_str().unwrap());
@@ -135,19 +143,19 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
         }
 
         let mut input = String::new();
-        File::open("Cargo.toml")
+        File::open(format!("{}/Cargo.toml", base_dir))
             .and_then(|mut f| f.read_to_string(&mut input))
             .unwrap();
 
         let value = input.parse::<Value>().unwrap();
 
         // Add any local dependencies to the CMakeFiles so it can know better when to build.
-        write!(cmakelists, "file(GLOB_RECURSE RUST_SRCS\n    \"../src/*.rs\"")?;
+        write!(cmakelists, "file(GLOB_RECURSE RUST_SRCS\n    \"${{CMAKE_CURRENT_SOURCE_DIR}}/../src/*.rs\"")?;
         for x in value["dependencies"].as_table().unwrap() {
             if x.1.is_table() {
                 let t = x.1.as_table().unwrap();
                 if let Some(v) = t.get("path") {
-                    write!(cmakelists, "\n    \"../{}/src/*.rs\"",v.as_str().unwrap())?;
+                    write!(cmakelists, "\n    \"${{CMAKE_CURRENT_SOURCE_DIR}}/../{}/src/*.rs\"",v.as_str().unwrap())?;
                 }
             }
         }
