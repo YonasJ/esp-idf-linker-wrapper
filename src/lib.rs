@@ -1,0 +1,1 @@
+pub mod linker_that_configures_cmake;
