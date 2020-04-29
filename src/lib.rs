@@ -10,10 +10,10 @@ use std::fs::File;
 use std::io::Read;
 use std::collections::HashMap;
 
-const LIBS_FOR_IDF_PATH:&str = "target/for_idf";
+const LIBS_IDF_REL_PATH:&str="target/for_idf";
 
 pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
-    if env::var("CARGO_MANIFEST_DIR").is_err() {
+    if env::var("CARGO_MANIFEST_DIR").is_err() { // When working with a workspace, this will be a different directory than "."
         env::set_var("CARGO_MANIFEST_DIR", env::current_dir().unwrap().to_str().unwrap());
     }
     let base_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -69,24 +69,24 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
     println!("BEGIN linker_main: {:?}", std::env::current_exe().unwrap());
 
     let main_dir = format!("{}/main", base_dir);
-    let main_path = Path::new(main_dir.as_str());
-    if !main_path.exists() {
-        fs::create_dir_all(main_path)?;
-    }
+    let idf_libs_path = format!("{}/{}", base_dir, LIBS_IDF_REL_PATH);
+
+    fs::create_dir_all(&main_dir)?;
+    fs::create_dir_all(&idf_libs_path)?;
 
     let mut linker_args = String::new();
     writeln!(linker_args, "working dir: {:?}", env::current_dir().unwrap()).unwrap();
-    writeln!(linker_args, "linker: {:?}", env::current_exe().unwrap()).unwrap();
+    writeln!(linker_args, "Command: {:?} \\", env::current_exe().unwrap()).unwrap();
     let mut is_debug = 0;
     for x in env::args() {
-        writeln!(linker_args, "arg: {:?}", x).unwrap();
+        writeln!(linker_args, "  {:?} \\", x).unwrap();
         if x.contains("debug") {
             is_debug = is_debug + 1;
         } else if x.contains("release") {
             is_debug = is_debug - 1;
         }
     }
-    fs::write(format!("{}/{}/linker_args.txt", env::var("CARGO_MANIFEST_DIR").unwrap(),LIBS_FOR_IDF_PATH), linker_args).expect("Unable to record linker args.");
+    fs::write(format!("{}/linker_args.txt", idf_libs_path), linker_args).expect("Unable to record linker args.");
 
     let cmakelists_in = format!("{}/main/CMakeLists.txt.in", base_dir);
     let cmakelists_in_path = Path::new(cmakelists_in.as_str());
@@ -118,7 +118,6 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
 
     if matches.is_present("libs") {
         let mut libs_list_str = String::new();
-        fs::create_dir_all(LIBS_FOR_IDF_PATH)?;
         let mut name_counter = HashMap::<String,u32>::new();
 
         for x in matches.values_of("libs").unwrap() {
@@ -141,15 +140,17 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
                 },
             };
 
-            let new_lib_name = format!(
+
+            let new_lib_rel_path = format!(
                 "{}/{}{}.{}",
-                LIBS_FOR_IDF_PATH,
+                LIBS_IDF_REL_PATH,
                 lib_base_name,
                 name_count,
                 xp.extension().unwrap().to_str().unwrap());
 
             if !lib_is_included_by_isp_idf_so_should_be_skipped {
-                fs::copy(x, &new_lib_name)?;
+
+                fs::copy(x, format!("{}/{}", base_dir, new_lib_rel_path))?;
 
                 if libs_list_str.len() > 0 {
                     writeln!(libs_list_str, "")?;
@@ -157,7 +158,7 @@ pub fn linker_main() -> Result<(), Box<dyn error::Error>> {
                 write!(
                     libs_list_str,
                     "    \"${{CMAKE_CURRENT_SOURCE_DIR}}/../{}\"",
-                    new_lib_name
+                    new_lib_rel_path
                 )?;
             }
         }
