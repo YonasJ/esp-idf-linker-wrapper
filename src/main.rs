@@ -1,5 +1,7 @@
-mod linker_that_configures_cmake;
+use crate::lib::linker_main;
+
+mod lib;
 
 fn main() {
-    linker_that_configures_cmake::linker_main().expect("Failed to configure cmake");
+    linker_main().expect("Failed to configure cmake");
 }
