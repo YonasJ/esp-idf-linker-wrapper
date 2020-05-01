@@ -1,4 +1,4 @@
-git use crate::lib::linker_main;
+use crate::lib::linker_main;
 
 mod lib;
 
